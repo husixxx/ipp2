@@ -3,6 +3,7 @@ namespace IPP\Student;
 
 
 use DOMDocument;
+use DOMElement;
 use IPP\Core\AbstractInterpreter;
 use IPP\Core\Exception\NotImplementedException;
 use IPP\Core\ReturnCode;
@@ -50,12 +51,17 @@ class SymbolTable {
 
 /**
  * Class FrameManager
- * @package IPP\Student
+ * 
+ * The FrameManager class is responsible for managing the frames in the interpreter.
+ * It keeps track of the Global Frame (GF), Local Frames (LF), and Temporary Frame (TF).
  */
 class FrameManager {
     private SymbolTable $GF; // Global Frame
+    /**
+     * @var SymbolTable[] $LFStack Stack of Local Frames
+     */
     private array $LFStack = []; // Stack of Local Frames
-    private SymbolTable $TF; // Temporary Frame
+    private ?SymbolTable $TF; // Temporary Frame
     private bool $isTFDefined = false;
 
     public function __construct() {
@@ -91,14 +97,14 @@ class FrameManager {
         }
     }
 
-    public function getLF() {
+    public function getLF(): SymbolTable{
         if(empty($this->LFStack)) {
             exit(ReturnCode::FRAME_ACCESS_ERROR);
         }
         return end($this->LFStack);
     }
 
-    public function popFrame() {
+    public function popFrame() : void {
         if(empty($this->LFStack)) {
             exit(ReturnCode::FRAME_ACCESS_ERROR);
         }
@@ -106,16 +112,21 @@ class FrameManager {
         $this->isTFDefined = true;
     }
 
-    // Metody pro práci s GF, LF a TF
 }
 
+/**
+ * Class LabelManager
+ * 
+ * The LabelManager class is responsible for managing the labels in the interpreter.
+ * It keeps track of the positions of the labels in the source code.
+ */
 class LabelManager {
     
 
-    private $labelPositions = []; 
-    private $callStack = []; 
+    private mixed $labelPositions = []; 
+    private mixed $callStack = []; 
     
-    public function addLabel($labelName, $position) {
+    public function addLabel(mixed $labelName, mixed $position) : void {
         if( array_key_exists($labelName, $this->labelPositions)) {
             exit(ReturnCode::SEMANTIC_ERROR);
         }
@@ -123,23 +134,31 @@ class LabelManager {
     }
 
     
-    public function getLabelPosition($labelName) {
+    public function getLabelPosition(mixed $labelName) : mixed {
         return $this->labelPositions[$labelName] ?? null;
     }
 
     
-    public function pushCallPosition($position) {
+    public function pushCallPosition(mixed $position) : void{
         array_push($this->callStack, $position);
     }
 
-    public function popCallPosition() {
+    public function popCallPosition(): mixed{
         return array_pop($this->callStack);
     }
 }
+
+/**
+ * Class Interpreter
+ * 
+ * The Interpreter class is responsible for interpreting the XML representation of the IPPcode21 code.
+ * It implements the execute method which is called by the IPPcode21 executor.
+ */
 class Interpreter extends AbstractInterpreter
 {
+
+    // Properties like frames , labels and data stack and iterator for the current position
     private ?FrameManager $frameManager = null;
-    private ?SymbolTable $symbolTable = null;
     private ?LabelManager $labelManager = null;
     private ?DataStack $dataStack = null;
     private int $curr_position;
@@ -174,106 +193,106 @@ class Interpreter extends AbstractInterpreter
     public function execute(): int
     {
         // TODO: Start your code here
+       /** @var array<int|string, string> $orders */
        $orders = [];
        $real_instructions = [];
        $order_check = [];
        
             
         // Check \IPP\Core\AbstractInterpreter for predefined I/O objects:
+
+
+            // try to load the xml file, parse it and store instructions and their orders in dictionary
             try {
                 
                 $dom = $this->source->getDOMDocument();
                 
                 $this->curr_position = 0;
 
+                // get all the nodes even bad ones
                 $instructions = $dom->documentElement->childNodes;
 
                 foreach($instructions as $instruction) {
+
+                    // not an element node
                     if($instruction->nodeType !== XML_ELEMENT_NODE){
                         $this->curr_position++;
                         continue;
-                    } 
-                    // how to trimm ale the whitespaces
-                    // $instruction->nodeValue = trim($instruction->nodeValue);
-                    // foreach($instruction->attributes as $attr) {
-                    //     $attr->nodeValue = trim($attr->nodeValue);
-                    // }
-
-                    if($instruction->nodeName == "instruction") {
-                        
-                        foreach($instruction->childNodes as $arg) {
-                            if($arg->nodeType !== XML_ELEMENT_NODE) continue;
-                            $arg->nodeValue = trim($arg->nodeValue);
-                        }
-
-                        $orders[$instruction->getAttribute("order")] = $instruction->getAttribute("order");
-
-                        if(array_key_exists($instruction->getAttribute("order"), $real_instructions)){
-                            exit(ReturnCode::INVALID_SOURCE_STRUCTURE);
-                        }
-                        //give me regex check that order can only has + 1-9 and 0-9
-                        if(preg_match('/^([1-9][0-9]*)$/', $instruction->getAttribute("order")) === 0){
-                            exit(ReturnCode::INVALID_SOURCE_STRUCTURE);
-                        }
-                        
-                        
-                        $real_instructions[$instruction->getAttribute("order")] = $instruction;
-
-
-
-                        
-                        array_push($order_check, $instruction->getAttribute("order"));
-
-                        if($instruction->getAttribute("opcode") == "LABEL") {
-                            $this->addLabel($this->getArgs($instruction)[0][1], $instruction->getAttribute("order"));
+                    }elseif($instruction instanceof DOMElement){
+                        if($instruction->nodeName == "instruction") {
                             
+                            // trim the arguments 
+                            foreach($instruction->childNodes as $arg) {
+                                if($arg->nodeType !== XML_ELEMENT_NODE) continue;
+                                $arg->nodeValue = trim($arg->nodeValue);
+                            }
+                            //store the order
+                            $orders[$instruction->getAttribute("order")] = $instruction->getAttribute("order");
+
+                            // xml check
+                            if(array_key_exists($instruction->getAttribute("order"), $real_instructions)){
+                                exit(ReturnCode::INVALID_SOURCE_STRUCTURE);
+                            }
+                            // xml check
+                            if(preg_match('/^([1-9][0-9]*)$/', $instruction->getAttribute("order")) === 0){
+                                exit(ReturnCode::INVALID_SOURCE_STRUCTURE);
+                            }
+                            
+                            $real_instructions[$instruction->getAttribute("order")] = $instruction;
+                            array_push($order_check, $instruction->getAttribute("order"));
+
+                            if($instruction->getAttribute("opcode") == "LABEL") {
+                                $this->addLabel($this->getArgs($instruction)[0][1], $instruction->getAttribute("order"));
+                                
+                            }
+                            $this->curr_position++;
+                        }else{
+                            exit(ReturnCode::INVALID_SOURCE_STRUCTURE);
                         }
-                        $this->curr_position++;
-                    }else{
-                        exit(ReturnCode::INVALID_SOURCE_STRUCTURE);
                     }
                 }
-
+                // sort by order and check if the orders are unique
                 ksort($real_instructions);
                 ksort($order_check);
 
                 $unique_orders = array_unique(array_keys($real_instructions));
                 
                 if (count($unique_orders) !== count($real_instructions)) {
-                    exit(32);
+                    exit(32); // xml error
                 }
 
                 
                 $this->curr_position = 0;
-                $instructionCount = max($orders);
+                $instructionCount = max($orders); // get the top limit
             
                 
-                
-
+                // the main parsing loop
                 while($this->curr_position <= $instructionCount) {
 
-                    if(isset($orders[$this->curr_position])){
-
+                    // check if order exists
                     
-                        $search = $orders[$this->curr_position];
 
+                        // get the index for instruction
+                        $search = $orders[(int)$this->curr_position];
+                        // check if the instruction exists
                         if(isset($real_instructions[(string)$search])){
-
+                            //extract the instruction
                             $instruction = $real_instructions[(string)$search];
                     
-                        
+                            // parse it
                             if($instruction->nodeName == "instruction") {
                                 
                                 $this->parseOpcode($instruction);
                                 
                             }
                         }
-                    }
+                    
+                    //move to next
                     $this->curr_position++;
                     
                 }
         
-                
+                // successfull return
                 return ReturnCode::OK; // Replace with actual success code
             } catch (\Exception $e) {
                
@@ -281,7 +300,7 @@ class Interpreter extends AbstractInterpreter
             }
     }
 
-    private function parseOpcode($instruction):void {
+    private function parseOpcode(DOMELEMENT $instruction):void {
         $opcode = $instruction->getAttribute("opcode");
         $opcode = strtoupper($opcode);
         switch ($opcode){
@@ -294,9 +313,6 @@ class Interpreter extends AbstractInterpreter
             case "WRITE":
                 $this->parseWrite($instruction);
                 break;
-            // case "LABEL":
-            //     $this-> parseLabel($instruction);
-            //     break; 
             case "CREATEFRAME":
                 $this->parseCreateFrame();
                 break;
@@ -377,13 +393,24 @@ class Interpreter extends AbstractInterpreter
                 break;
             case "EXIT":
                 $this->parseExit($instruction);
-                break;
             case "DPRINT":
                 $this->parseDPRINT($instruction);
                 break;
             case "BREAK":
                 $this->parseBreak($instruction);
                 break;
+            case "JUMP":
+                break;
+            case "JUMPIFEQ":
+                break;
+            case "JUMPIFNEQ":
+                break;
+            case "LABEL":
+                break;
+            
+            
+            default :
+                exit(ReturnCode::INVALID_SOURCE_STRUCTURE);
             
 
             
@@ -393,10 +420,11 @@ class Interpreter extends AbstractInterpreter
         }
     }
 
-    private function parseBreak($instruction):void {
+    private function parseBreak(mixed $instruction):void {
         $this->stderr->writeString("Breakpoint at lane:" . $this->curr_position . "\n");
     }
 
+    // this function is used to print the value of the variable
     private function parseDPRINT( mixed $instruction):void {
         $args = $this->getArgs($instruction);
         $sym = $args[0][1];
@@ -410,7 +438,8 @@ class Interpreter extends AbstractInterpreter
         $this->stderr->writeString("$sym\n");
     }
 
-    private function parseExit( mixed $instruction):void {
+    // this function is used to exit the program
+    private function parseExit( mixed $instruction):never {
         $args = $this->getArgs($instruction);
         $symType = $this->getType($args[0]);
         if($symType !== "int"){
@@ -424,6 +453,7 @@ class Interpreter extends AbstractInterpreter
 
     }
 
+    // this function is used to concatenate two strings
     private function parseConcat( mixed $instruction):void {
         $args = $this->getArgs($instruction);
         $var = $args[0][1];
@@ -441,7 +471,8 @@ class Interpreter extends AbstractInterpreter
         $frame_var->SetVariable( $var, "$sym" . "$sym2", "string");
     }
 
-    private function parseRelational( $instruction,  $opcode):void {
+    // this function is used to parse relational instructions and made the comparison
+    private function parseRelational(mixed $instruction, mixed $opcode):void {
         $args = $this->getArgs($instruction);
         $var = $args[0][1];
         if(!$this->variableExists($args[0]) || !$this->variableExists($args[1]) || !$this->variableExists($args[2])) {
@@ -474,68 +505,73 @@ class Interpreter extends AbstractInterpreter
        
 
     }
-    private function replaceEscapeSequences(mixed $text): mixed {
+    // helping function to replace escape sequences
+    private function replaceEscapeSequences(mixed $text): string {
        
 
         // Nahrazení escape sekvencí ASCII hodnotami
         $decodedText = preg_replace_callback(
         '/\\\\(\d{3})/', // Hledá escape sekvence ve formátu \nnn, kde nnn je číselná hodnota
         function ($matches) {
-            return chr($matches[1]); // Převede číselnou hodnotu na znak
+            return chr((int)$matches[1]); // Převede číselnou hodnotu na znak
         }, $text);
-
+ 
         return $decodedText;
     }
 
+    // this function is used to write the value of the variable
     private function parseWrite( mixed $instruction):void {
         
         
         $args = $this->getArgs($instruction);
         
         $sym = $args[0][1];
-
+        $sym_type = $args[0][0];
         
-        $symType = $this->getType($args[0]);
-        // Split
-        if ($symType === "var") {
-            list($sym_prefix, $sym) = explode("@", $sym, 2);
-            $sym_prefix = $this->getFrame($sym_prefix);
+        if($sym_type !== "var"){
             
+            switch($sym_type){
+                case "int":
+                    $this->stdout->writeInt($sym);
+                    break;
+                case "bool":
+                    $this->stdout->writeBool(($sym == true ? true : false));
+                    break;
+                case "string":
+                    
+                    $sym = $this->replaceEscapeSequences($sym);
+                    $this->stdout->writeString("$sym");
+                    break;
+                case "nil":
+                    $this->stdout->writeString("nil");
+                    break;
+            }
+        }else{
+            $symType = $this->getType($args[0]);
+            $sym = $this->getValue($args[0]);
+            if($symType === "string"){
+                $sym = $this->replaceEscapeSequences($sym);
+                $this->stdout->writeString("$sym" );
+            }elseif($symType === "bool"){
+                $sym = $sym == true ? true : false;
+                $this->stdout->writeBool($sym);
+            }elseif($symType === "int"){
+                $this->stdout->writeInt($sym);
+            }elseif($symType === "nil"){
+                $this->stdout->writeString("nil");
+            }
+                
+                
         }
         
-        else{
-            if(list($sym_prefix, $sym) = explode("@", $sym, 2)[0] === null){
-                switch($symType){
-                    case "int":
-                        $this->stdout->writeString("$sym");
-                        break;
-                    case "bool":
-                        $this->stdout->writeString(($sym == "true" ? "true" : "false"));
-                        break;
-                    case "string":
-                       
-                        $sym = $this->replaceEscapeSequences($sym);
-                        $this->stdout->writeString("$sym");
-                        break;
-                    case "nil":
-                        $this->stdout->writeString("nil");
-                        break;
-                }
-            }else{
-
-                $sym = $this->getValue($args[0]);
-                if($symType === "string"){
-                    $sym = $this->replaceEscapeSequences($sym);
-                }elseif($symType === "bool"){
-                    $sym = $sym == "true" ? "true" : "false";
-                }
-                
-                $this->stdout->writeString("$sym" );
-            }
-        }
 
     }
 
+
+    /**
+     *  @brief this function is used to parse the int2char instruction
+     *
+     */  
     private function parseInt2Char( mixed $instruction): void{
         $args = $this->getArgs($instruction);
         $var = $args[0][1];
@@ -583,6 +619,10 @@ class Interpreter extends AbstractInterpreter
 
     }
 
+
+    /**
+     * @brief this function is used to get char from string and store it to variable
+     */
     private function parseGetChar(mixed $instruction): void{
         $args = $this->getArgs($instruction);
         $var = $args[0][1];
@@ -600,6 +640,10 @@ class Interpreter extends AbstractInterpreter
         $frame_var = $this->getFrame($frame_var);
         $frame_var->setVariable($var, $sym[$sym2], "string");
     }
+
+    /**
+     * @brief this function is used to set char in string at index
+     */
 
     private function parseSetChar(mixed $instruction): void{
         $args = $this->getArgs($instruction);
@@ -621,6 +665,9 @@ class Interpreter extends AbstractInterpreter
         $frame_var->setVariable($var, substr_replace($sym, $sym3, $sym2, 1), "string");
     }
    
+    /**
+     * @brief this function is used to parse the read instruction
+     */
     private function parseRead(mixed $instruction): void{
         $args = $this->getArgs($instruction);
         $var = $args[0][1];
@@ -650,10 +697,14 @@ class Interpreter extends AbstractInterpreter
         }
         $frame_var->setVariable($var, $value, $symType);
     }
+
+    /**
+     * @brief this function is used to parse the defvar instruction
+     */
     private function parseDefVar( mixed $instruction):void {
         
         $argCount = 0;
-
+		$value = "";
         foreach($instruction->childNodes as $arg) {
             if($arg->nodeType !== XML_ELEMENT_NODE) continue;
             if($arg->nodeName == "arg1") {
@@ -671,8 +722,8 @@ class Interpreter extends AbstractInterpreter
             exit(32);
         }
         
-
-        list($frame, $value) = explode("@", $value, 2); // Split
+	
+	    list($frame, $value) = explode("@", $value, 2); // Split
 
         $frame = $this->getFrame($frame);
          // get frame
@@ -684,6 +735,9 @@ class Interpreter extends AbstractInterpreter
         }  
     }
 
+    /**
+     * @brief this function is used to get the frame
+     */
     private function getFrame(mixed $frame): mixed { // Get frame function
         if($frame == "GF") {
             return $this->getFrameManager()->getGF();
@@ -695,6 +749,10 @@ class Interpreter extends AbstractInterpreter
             return ReturnCode::FRAME_ACCESS_ERROR;
         }
     }
+
+    /**
+     * @brief helping function is used to get the arguments
+     */
     private function getArgs(mixed $instruction) : mixed {
         $args = [];
 
@@ -714,16 +772,6 @@ class Interpreter extends AbstractInterpreter
         ksort($args);
         return $args;
     }
-    // private function isConstant($sym_prefix){
-
-    //     if($sym_prefix == "int" || $sym_prefix == "bool" || $sym_prefix == "string" || $sym_prefix == "nil") {
-    //         return true;
-    //     }else{
-    //         return false;
-    //     }
-
-    // }
-    
     
     private function parseMove(mixed $instruction): void {
         
@@ -774,7 +822,7 @@ class Interpreter extends AbstractInterpreter
     } // KUKNI SA NA TEXT.XML KKOKOT
 
     
-    private function parseReturn($instruction) : void {
+    private function parseReturn(mixed $instruction) : void {
        
         $position = $this->getLabelManager()->popCallPosition();
         if($position == null) {
@@ -860,7 +908,7 @@ class Interpreter extends AbstractInterpreter
         
     }
 
-    private function parseJumpIfEq(mixed $instruction, $opcode):void {
+    private function parseJumpIfEq(mixed $instruction, mixed $opcode):void {
         $args = $this->getArgs($instruction);
         $label = $args[0][1];
         $position = $this->getLabelManager()->getLabelPosition($label);
@@ -892,7 +940,7 @@ class Interpreter extends AbstractInterpreter
 
     }
 
-    private function variableExists($symbol){
+    private function variableExists(mixed $symbol): bool{
         if($symbol[0] == "var") {
             list($frame, $var) = explode("@", $symbol[1], 2);
             $frame = $this->getFrame($frame);
@@ -982,7 +1030,11 @@ class Interpreter extends AbstractInterpreter
 
 
 class DataStack {
-    private $stack = [];
+
+    /**
+     * @var array<mixed> $stack
+     */
+    private array $stack = [];
     // code stack which will be used to store the data
     public function push(mixed $data, mixed $type): void {
         array_push($this->stack, [$data,$type]);
