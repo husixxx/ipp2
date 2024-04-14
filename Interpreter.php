@@ -273,20 +273,23 @@ class Interpreter extends AbstractInterpreter
                     
 
                         // get the index for instruction
-                        $search = $orders[(int)$this->curr_position];
-                        // check if the instruction exists
-                        if(isset($real_instructions[(string)$search])){
-                            //extract the instruction
-                            $instruction = $real_instructions[(string)$search];
-                    
-                            // parse it
-                            if($instruction->nodeName == "instruction") {
-                                
-                                $this->parseOpcode($instruction);
-                                
+                        if(isset($orders[(int)$this->curr_position])){
+
+                            
+                            $search = $orders[(int)$this->curr_position];
+                            // check if the instruction exists
+                            if(isset($real_instructions[(string)$search])){
+                                //extract the instruction
+                                $instruction = $real_instructions[(string)$search];
+                        
+                                // parse it
+                                if($instruction->nodeName == "instruction") {
+                                    
+                                    $this->parseOpcode($instruction);
+                                    
+                                }
                             }
                         }
-                    
                     //move to next
                     $this->curr_position++;
                     
@@ -407,6 +410,10 @@ class Interpreter extends AbstractInterpreter
                 break;
             case "LABEL":
                 break;
+            case "TYPE":
+                $this->parseType($instruction);
+                break;
+            
             
             
             default :
@@ -420,6 +427,22 @@ class Interpreter extends AbstractInterpreter
         }
     }
 
+
+    private function parseType(mixed $instruction ) : void {
+        $args = $this->getArgs($instruction);
+        $var = $args[0][1];
+        $symType = $this->getType($args[1]);
+        if($symType === "var"){
+            $sym = $this->getValue($args[1]);
+            $symType = $this->getType($args[1]);
+        }else{
+            $sym = $args[1][1];
+        }
+
+        list($frame_var, $var) = explode("@", $var, 2);
+        $frame_var = $this->getFrame($frame_var);
+        $frame_var->setVariable($var, $symType, "string");
+    }
     private function parseBreak(mixed $instruction):void {
         $this->stderr->writeString("Breakpoint at lane:" . $this->curr_position . "\n");
     }
@@ -508,7 +531,9 @@ class Interpreter extends AbstractInterpreter
     // helping function to replace escape sequences
     private function replaceEscapeSequences(mixed $text): string {
        
-
+        if($text === null){
+            return '';
+        }
         // Nahrazení escape sekvencí ASCII hodnotami
         $decodedText = preg_replace_callback(
         '/\\\\(\d{3})/', // Hledá escape sekvence ve formátu \nnn, kde nnn je číselná hodnota
