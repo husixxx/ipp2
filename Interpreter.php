@@ -1,15 +1,16 @@
 <?php
+
+/*************************************/
+/* author: xhuska03                  */
+/* IPP 2. project                    */
+/*************************************/
+
 namespace IPP\Student;
-
-
-use DOMDocument;
 use DOMElement;
 use IPP\Core\AbstractInterpreter;
-use IPP\Core\Exception\NotImplementedException;
 use IPP\Core\ReturnCode;
-
-
-
+use umlT;
+ 
 
 
 /**
@@ -17,6 +18,7 @@ use IPP\Core\ReturnCode;
  * @package IPP\Student
  */
 class SymbolTable {
+    
     private mixed $variables = [];
 
     public function setVariable(mixed $name, mixed $value, mixed $type): void{
@@ -85,6 +87,7 @@ class FrameManager {
             exit(ReturnCode::FRAME_ACCESS_ERROR);
         }
     }
+
     public function getGF() : SymbolTable {
         return $this->GF;
     }
@@ -127,7 +130,7 @@ class LabelManager {
     private mixed $callStack = []; 
     
     public function addLabel(mixed $labelName, mixed $position) : void {
-        if( array_key_exists($labelName, $this->labelPositions)) {
+        if( array_key_exists($labelName, $this->labelPositions)) { // semantic check
             exit(ReturnCode::SEMANTIC_ERROR);
         }
         $this->labelPositions[$labelName] = $position;
@@ -135,16 +138,16 @@ class LabelManager {
 
     
     public function getLabelPosition(mixed $labelName) : mixed {
-        return $this->labelPositions[$labelName] ?? null;
+        return $this->labelPositions[$labelName] ?? null; // return null or position
     }
 
     
     public function pushCallPosition(mixed $position) : void{
-        array_push($this->callStack, $position);
+        array_push($this->callStack, $position); // push position to call stack
     }
 
     public function popCallPosition(): mixed{
-        return array_pop($this->callStack);
+        return array_pop($this->callStack); // pop position from call stack
     }
 }
 
@@ -190,9 +193,10 @@ class Interpreter extends AbstractInterpreter
 
 
 
+    // main function to execute the code
     public function execute(): int
     {
-        // TODO: Start your code here
+        
        /** @var array<int|string, string> $orders */
        $orders = [];
        $real_instructions = [];
@@ -237,10 +241,10 @@ class Interpreter extends AbstractInterpreter
                             if(preg_match('/^([1-9][0-9]*)$/', $instruction->getAttribute("order")) === 0){
                                 exit(ReturnCode::INVALID_SOURCE_STRUCTURE);
                             }
-                            
+                            // store the instruction
                             $real_instructions[$instruction->getAttribute("order")] = $instruction;
                             array_push($order_check, $instruction->getAttribute("order"));
-
+                            // check if the instruction is label
                             if($instruction->getAttribute("opcode") == "LABEL") {
                                 $this->addLabel($this->getArgs($instruction)[0][1], $instruction->getAttribute("order"));
                                 
@@ -303,9 +307,12 @@ class Interpreter extends AbstractInterpreter
             }
     }
 
+    // this function is used to parse instructions based their opcode
     private function parseOpcode(DOMELEMENT $instruction):void {
+        // get the opcode
         $opcode = $instruction->getAttribute("opcode");
         $opcode = strtoupper($opcode);
+        // the instructions
         switch ($opcode){
             case "MOVE":
                 $this->parseMove($instruction);
@@ -428,6 +435,7 @@ class Interpreter extends AbstractInterpreter
     }
 
 
+    // this function is used to parse the type instruction
     private function parseType(mixed $instruction ) : void {
         $args = $this->getArgs($instruction);
         $var = $args[0][1];
@@ -512,7 +520,7 @@ class Interpreter extends AbstractInterpreter
         }
         list($frame_var, $var) = explode("@", $var, 2);
         $frame_var = $this->getFrame($frame_var);
-
+        // store in frame
         switch($opcode){
             case "LT":
                 $frame_var->setVariable($var, $sym1 < $sym2, "bool");
@@ -534,11 +542,11 @@ class Interpreter extends AbstractInterpreter
         if($text === null){
             return '';
         }
-        // Nahrazení escape sekvencí ASCII hodnotami
+        
         $decodedText = preg_replace_callback(
-        '/\\\\(\d{3})/', // Hledá escape sekvence ve formátu \nnn, kde nnn je číselná hodnota
+        '/\\\\(\d{3})/', 
         function ($matches) {
-            return chr((int)$matches[1]); // Převede číselnou hodnotu na znak
+            return chr((int)$matches[1]);
         }, $text);
  
         return $decodedText;
@@ -798,6 +806,9 @@ class Interpreter extends AbstractInterpreter
         return $args;
     }
     
+    /**
+     * @brief this function is used to parse the move instruction
+     */
     private function parseMove(mixed $instruction): void {
         
         $args = $this->getArgs($instruction);
@@ -815,8 +826,8 @@ class Interpreter extends AbstractInterpreter
 
 
         
+        //split the variable
         list($frame_var, $var) = explode("@", $var, 2);
-         // Split
         $frame_var = $this->getFrame($frame_var); // get frame
         
         if( $symType !== "var") {
@@ -832,6 +843,9 @@ class Interpreter extends AbstractInterpreter
 
     }
 
+    /**
+     * @brief this function is used to parse the call instruction
+     */
     private function parseCall(mixed $instruction): void{
         
         $args = $this->getArgs($instruction);
@@ -844,9 +858,11 @@ class Interpreter extends AbstractInterpreter
         $this->getLabelManager()->pushCallPosition($curr_position + 1);
         $this->curr_position = $position;
 
-    } // KUKNI SA NA TEXT.XML KKOKOT
+    }
 
-    
+    /**
+     * @brief this function is used to parse the return instruction
+    */
     private function parseReturn(mixed $instruction) : void {
        
         $position = $this->getLabelManager()->popCallPosition();
@@ -856,21 +872,33 @@ class Interpreter extends AbstractInterpreter
         $this->curr_position = $position;
     }
 
+    /**
+     * @brief this function is used to parse the createframe instruction
+     */
     private function parseCreateFrame(): void {
        
         $this->getFrameManager()->createTF();
     }
 
+    /**
+     * @brief this function is used to parse the pushframe instruction
+     */
     private function parsePushFrame():void {
         
         $this->getFrameManager()->pushFrame();
     }
 
+    /**
+     * @brief this function is used to parse the popframe instruction
+     */
     private function parsePopFrame(): void {
        
         $this->getFrameManager()->popFrame();
     }
 
+    /**
+     * @brief this function is used to parse the pushs instruction
+     */
     private function parsePUSHS( mixed $instruction): void {
         $args = $this->getArgs($instruction);
         $arg_value = $args[0][1];
@@ -878,6 +906,9 @@ class Interpreter extends AbstractInterpreter
         $this->getDataStack()->push($arg_value, $arg_type);
     }
 
+    /**
+     * @brief this function is used to parse the pops instruction
+     */
     private function parsePOPS(mixed $instruction):void {
         $args = $this->getArgs($instruction);
         $arg_to_store = $args[0][1];
@@ -892,13 +923,17 @@ class Interpreter extends AbstractInterpreter
         
     }
 
+    /**
+     * @brief helping function used to extract value from operand
+     */
     private function getValue(mixed $symbol): mixed{
-
+        // if variable, search in frame for value
         if($symbol[0] == "var") {
             list($frame, $var) = explode("@", $symbol[1], 2);
             $frame = $this->getFrame($frame);
             return $frame->getVariable($var);
-        }else{
+        }else{ // its constant just return it
+            
             if($symbol[0] == "int"){
                 
                 //check if the value is in the correct format for int
@@ -911,16 +946,23 @@ class Interpreter extends AbstractInterpreter
         }
     }
 
+    /**
+     * @brief helping function used to extract type from operand
+     */
     private function getType(mixed $symbol): mixed{
+        // if variable, search in frame for type
         if($symbol[0] == "var") {
             list($frame, $var) = explode("@", $symbol[1], 2);
             $frame = $this->getFrame($frame);
             return $frame->getVariableType($var);
-        }else{
+        }else{ // its constant just return type
             return $symbol[0];
         }
     }
 
+    /**
+     * @brief this function is used to parse the jump instruction
+     */
     private function parseJump(mixed $instruction): void{
         $args = $this->getArgs($instruction);
         $label = $args[0][1];
@@ -933,6 +975,9 @@ class Interpreter extends AbstractInterpreter
         
     }
 
+    /**
+     * @brief this function is used to parse the jumpifeq and jumpifneq instructions
+     */
     private function parseJumpIfEq(mixed $instruction, mixed $opcode):void {
         $args = $this->getArgs($instruction);
         $label = $args[0][1];
@@ -940,11 +985,13 @@ class Interpreter extends AbstractInterpreter
         if($position === null){
             exit(ReturnCode::OPERAND_TYPE_ERROR);
         }
+        // extract needed values
         $symType = $this->getType($args[1]);
         $symType2 = $this->getType($args[2]);
         $sym1 = $this->getValue($args[1]);
         $sym1 = $sym1 . '';
         $sym2 = $this->getValue($args[2]);
+
         if(!($symType === $symType2))
         {
             exit(ReturnCode::OPERAND_TYPE_ERROR);
@@ -965,6 +1012,9 @@ class Interpreter extends AbstractInterpreter
 
     }
 
+    /**
+     * @brief helping function used to check if the variable exists in the frame
+     */
     private function variableExists(mixed $symbol): bool{
         if($symbol[0] == "var") {
             list($frame, $var) = explode("@", $symbol[1], 2);
@@ -975,6 +1025,10 @@ class Interpreter extends AbstractInterpreter
         }
     }
     
+
+    /**
+     * @brief this function is used to parse the arithmetic instructions
+     */
     private function parseArithmetic( mixed $instruction, mixed $opcode): void{
         $args = $this->getArgs($instruction);
         $var = $args[0][1];
@@ -1012,6 +1066,9 @@ class Interpreter extends AbstractInterpreter
     
     }
 
+    /**
+     * @brief this function is used to parse the logical instructions
+     */
     private function parseLogical(mixed $instruction,mixed $opcode):void {
         $args = $this->getArgs($instruction);
         $var = $args[0][1];
@@ -1051,22 +1108,27 @@ class Interpreter extends AbstractInterpreter
 }
 
 
-
-
-
+/**
+ * Class DataStack
+ * 
+ * The DataStack class is responsible for managing the data stack in the interpreter.
+ * It keeps track of the data pushed and popped from the stack.
+ */
 class DataStack {
 
     /**
      * @var array<mixed> $stack
      */
     private array $stack = [];
-    // code stack which will be used to store the data
+    // init stack
+
+    // push data to stack
     public function push(mixed $data, mixed $type): void {
         array_push($this->stack, [$data,$type]);
     }
 
-   // code function to get the top only if the stack is not empty
-
+   
+    // pop data from stack
     public function pop() : mixed{
         if (empty($this->stack)) {
             exit(ReturnCode::VALUE_ERROR);
@@ -1074,7 +1136,7 @@ class DataStack {
         return array_pop($this->stack);
     }
 
-
+    // check if stack is empty
     public function isEmpty() : bool {
         return empty($this->stack);
     }
